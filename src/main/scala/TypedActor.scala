@@ -22,11 +22,11 @@ object TypedActor {
       ask(msg)
   }
 
-  /** Convert a normal actor ref into a TypedActorRef */
+  /** Convert a normal actor ref into a TypedActorRef.  Only use this if you KNOW
+    * the actor ref points to a TypedActor, and even then, prefer using the
+    * TypedActorSystem implicit class.
+    */
   def apply[A,B](actorRef : ActorRef) : TypedActorRef[A,B] = new TypedActorRef[A,B](actorRef)
-
-  /** Return the Props() object to create a typed actor */
-  def apply[A,B](fn : A => B) : Props = Props(classOf[TypedActor[A,B]], fn)
 
   /** Extends an ActorSystem by allowing a user to directly create a TypedActorRef
     * from a function.
