@@ -37,18 +37,18 @@ object ClusterServiceApp {
     val doubler_svc = TypedActor[Int,Int](doubler_ref)
     val tripler_svc = TypedActor[Int,Int](tripler_ref)
 
-    repl("Service >>") {
+    repl("Service >> ") {
       case ("double", vals) =>
         vals map (_.toInt) foreach { n =>
           for (result <- doubler_svc ? n) {
-            println(s"Doubled $n and got $result back!")
+            println(s"2 * $n is $result!")
           }
         }
 
       case ("triple", vals) =>
         vals map (_.toInt) foreach { n =>
           for (result <- tripler_svc ? n) {
-            println(s"Tripled $n and got $result back!")
+            println(s"3 * $n is $result!")
           }
         }
     }

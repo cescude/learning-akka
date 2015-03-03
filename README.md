@@ -32,6 +32,10 @@ how you use them, see the TypedApp.scala file for an actual example.
     printer_ref ! "yesterday!"   // GOOD
     printer_ref ! 4.milliseconds // Won't compile
 
+Note that TypedApp.scala, as-is, is written to FAIL to compile (this is the
+point of the TypedActor class).  You'll need to comment out the errors to run
+the example.
+
 ## ClusterService
 
 Tracks nodes joining & leaving the cluster, Identifies the named actor and

@@ -5,26 +5,31 @@ import akka.cluster._
 import akka.cluster.ClusterEvent._
 
 object ClusterService {
-  def apply(workerName : String) : Props =
-    Props(classOf[ClusterService], workerName)
-
-  // def apply(workerName : String)(implicit system : ActorSystem) : ActorRef =
-  //   system.actorOf(Props(classOf[ClusterService], workerName), s"${workerName}_svc")
+  def apply(serviceName : String) : Props =
+    Props(classOf[ClusterService], serviceName)
 }
 
-class ClusterService(workerName : String) extends Actor with Stash {
+/** Identifies all nodes running the particularly named service on our cluster,
+  * providing an interface to all through an AdaptiveLoadBalancing router.
+  * 
+  * This class allows a user to deploy more/less nodes into a cluster to meet
+  * demand, while also maintaining multiple entry points that (each) load
+  * balance across the cluster.
+  */
+
+class ClusterService(serviceName : String) extends Actor with Stash {
   val cluster = Cluster(context.system)
 
-  val workerElements = workerName match {
+  val serviceNameElements = serviceName match {
     case RelativeActorPath(elements) => 
       elements
     case _ => 
       throw new IllegalArgumentException(
-        s"[$workerName] is not a valid relative actor path!")
+        s"[$serviceName] is not a valid relative actor path!")
   }
 
-  def worker(addr : Address) : ActorSelection =
-    context.actorSelection(RootActorPath(addr) / workerElements)
+  def serviceAt(addr : Address) : ActorSelection =
+    context.actorSelection(RootActorPath(addr) / serviceNameElements)
 
   override def preStart() = cluster.subscribe(self,
     classOf[MemberEvent],
@@ -32,47 +37,67 @@ class ClusterService(workerName : String) extends Actor with Stash {
 
   override def postStop() = cluster.unsubscribe(self)
 
-  def next(router : Router, been_stashing : Boolean) : Receive = {
-    case ActorIdentity(address, Some(_)) =>
-      val new_worker = worker(address.asInstanceOf[Address])
+  case class State(router : Router, is_stashing : Boolean = false) {
+    def addAddress(address : Address) : State = {
 
-      if ( been_stashing ) {
+      val new_worker = serviceAt(address)
+
+      if (router.routees.contains(new_worker)) {
+        this
+      }
+      else {
+        State(router.addRoutee(new_worker), is_stashing)
+      }
+    }
+
+    def dropAddress(address : Address) : State = 
+      State(router.removeRoutee(serviceAt(address)), is_stashing)
+
+    def stashing(yesno : Boolean) : State = State(router, yesno)
+
+    def hasRoutes : Boolean = router.routees.nonEmpty
+  }
+
+  def next(state : State) : Receive = {
+
+    // We only want identified actors in our router
+    case ActorIdentity(address, Some(_)) =>
+
+      if ( state.is_stashing ) {
         unstashAll()
       }
 
-      if ( !router.routees.contains(new_worker) ) {
-        context.become(next(router.addRoutee(new_worker), false))
-      }
-      else {
-        context.become(next(router, false))
-      }
+      context.become(next(state
+        .addAddress(address.asInstanceOf[Address])
+        .stashing(false)))
 
     case ActorIdentity(address, None) =>
       // The actor doesn't exist at this address.  So, do nothing with it.
 
     case MemberUp(m) =>
-      worker(m.address) ! Identify(m.address)
+      serviceAt(m.address) ! Identify(m.address)
 
     case ReachableMember(m) =>
-      worker(m.address) ! Identify(m.address)
+      serviceAt(m.address) ! Identify(m.address)
 
     case other : MemberEvent =>
-      context.become(next(router.removeRoutee(worker(other.member.address)), been_stashing))
+      context.become(next(state.dropAddress(other.member.address)))
 
     case UnreachableMember(m) =>
-      context.become(next(router.removeRoutee(worker(m.address)), been_stashing))
+      context.become(next(state.dropAddress(m.address)))
 
     case s : CurrentClusterState =>
-      // Don't need this
+      // Don't need this message
 
-    case msg : Any if router.routees.size > 0 =>
-      router.route(msg, sender())
+    case msg : Any if state.hasRoutes =>
+      state.router.route(msg, sender())
 
     case msg  : Any =>
       stash()
-      println(s"Stashed $msg")
-      context.become(next(router, true))
+      context.become(next(state.stashing(true)))
   }
 
-  def receive = next(Router(AdaptiveLoadBalancingRoutingLogic(context.system)), false)
+  def receive = next(State(
+    // Setup with an AdaptiveLoadBalancing router
+    Router(AdaptiveLoadBalancingRoutingLogic(context.system))))
 }
