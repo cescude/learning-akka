@@ -20,6 +20,9 @@ object TypedActor {
 
     def ?(msg : A)(implicit timeout : Timeout) : Future[B] =
       ask(msg)
+
+    def apply(msg: A)(implicit timeout: Timeout): Future[B] =
+      ask(msg)
   }
 
   /** Convert a normal actor ref into a TypedActorRef.  Only use this if you KNOW
@@ -37,14 +40,14 @@ object TypedActor {
     *  val system = ActorSystem("default")
     *  val my_actor = system.typedActorOf(2 * _)
     */
-  implicit class TypedActorSystem(system : ActorSystem) {
-
+  implicit class TypedActorSystem(factory : ActorRefFactory) {
+    
     /** Returns a single TypedActorRef interfacing the given function */
     def typedActorOf[A,B](fn : A => B) : TypedActorRef[A,B] =
-      new TypedActorRef(system.actorOf(props(fn)))
+      new TypedActorRef(factory.actorOf(props(fn)))
 
     def typedActorOf[A,B](fn : A => B, name : String) : TypedActorRef[A,B] = 
-      new TypedActorRef(system.actorOf(props(fn), name))
+      new TypedActorRef(factory.actorOf(props(fn), name))
 
     /** Returns a TypedActorRef interfacing a BalancingPool with the given number of
       * instances.  Note that because TypedActors don't rely on internal state,
@@ -58,7 +61,7 @@ object TypedActor {
     //     BalancingPool(num_instances).props(props(fn))))
 
     def typedActorPool[A,B](num_instances : Int, fn : A => B, name : String) : TypedActorRef[A,B] =
-      new TypedActorRef(system.actorOf(
+      new TypedActorRef(factory.actorOf(
         BalancingPool(num_instances).props(props(fn)), name))
 
   }

@@ -28,7 +28,11 @@ object TypedApp {
     doubler_ref ! 3
     doubler_ref ! "3" // ERROR #1
 
-    for (result <- doubler_ref ? 30) {
+    doubler_ref(9)
+      .map(_ / 3)
+      .map(v => println(v.toString))
+
+    for (result <- doubler_ref(30)) {
 
       val compile_fail : String = result // ERROR #2
 
@@ -40,6 +44,7 @@ object TypedApp {
 
     val inline_ref = system.typedActorOf({ x : Int => x * 3 }) // This works too
 
+    inline_ref(30).map(_.toString).foreach(printer_ref ! _)
     inline_ref ! "BAH" // ERROR #4
 
     //////////////////////////////////////////////////////////////////////////
@@ -56,7 +61,7 @@ object TypedApp {
 
     system.scheduler.schedule(0.milliseconds, 5.milliseconds) {
       doubler_pool_ref ! scala.util.Random.nextDouble() // ERROR #6
-      doubler_pool_ref ! scala.util.Random.nextInt(200)
+      doubler_pool_ref(scala.util.Random.nextInt(200)).map(printer_ref ! _.toString)
     }
   }
 }
